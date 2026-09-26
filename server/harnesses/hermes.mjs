@@ -124,8 +124,8 @@ function toThread(row, pilot) {
     archived: row.archived === 1,
     sizeBytes: tokens > 0 ? tokens * 4 : (row.message_count || 0) * 500,
     source: row.source || '',
-    canOpen: false,
-    ref: { sessionId: row.id, pilot },
+    canOpen: Boolean(row.cwd && path.isAbsolute(row.cwd)),
+    ref: { sessionId: row.id, pilot, cwd: row.cwd || '' },
   }
 }
 
@@ -174,8 +174,15 @@ async function scanThreads() {
   return out
 }
 
-function openThread() {
-  return { ok: false, error: 'Hermes sessions live in the terminal and chat apps — there is no link to open.' }
+function openThread(ref) {
+  const { sessionId, cwd } = ref || {}
+  if (typeof sessionId !== 'string' || !/^\d{8}_\d{6}_[0-9a-f]+$/.test(sessionId)) {
+    return { ok: false, error: 'That Hermes session id is not valid' }
+  }
+  if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) {
+    return { ok: false, error: 'That Hermes session has no usable working folder to resume in' }
+  }
+  return { ok: true, command: { argv: ['hermes', '--tui', '--resume', sessionId], cwd } }
 }
 
 function newSession() {

@@ -16,7 +16,7 @@ import opencode from '../server/harnesses/opencode.mjs'
 import { HARNESSES } from '../server/harnesses/index.mjs'
 import codex from '../server/harnesses/codex.mjs'
 import claudeCode from '../server/harnesses/claude-code.mjs'
-import { isLiveSession, isWaitingSession } from '../server/harnesses/hermes.mjs'
+import hermes, { isLiveSession, isWaitingSession } from '../server/harnesses/hermes.mjs'
 import { readTail, findExecutable } from '../server/lib/fsutil.mjs'
 import { schemeOf } from '../server/lib/xdg.mjs'
 import { withEnv, withPlatform, fakeExecutable } from './support/env.mjs'
@@ -65,6 +65,16 @@ test('an assistant final with no later user message raises a Hermes handoff', ()
   assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'assistant' }), true)
   assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'user' }), false)
   assert.equal(isWaitingSession({ ended_at: 1, latest_message_role: 'assistant' }), false)
+})
+
+test('Hermes offers a waiting session to the configured terminal', () => {
+  const opened = hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: '/tmp/demo' })
+  assert.deepEqual(opened, {
+    ok: true,
+    command: { argv: ['hermes', '--tui', '--resume', '20260926_100638_d3052c'], cwd: '/tmp/demo' },
+  })
+  assert.equal(hermes.openThread({ sessionId: ['20260926_100638_d3052c'], cwd: '/tmp/demo' }).ok, false)
+  assert.equal(hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: 'relative' }).ok, false)
 })
 
 // ── ids are prefixed, and refs from the page are not trusted ──────────────────
