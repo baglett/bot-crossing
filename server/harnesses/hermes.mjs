@@ -124,8 +124,8 @@ function toThread(row, pilot) {
     archived: row.archived === 1,
     sizeBytes: tokens > 0 ? tokens * 4 : (row.message_count || 0) * 500,
     source: row.source || '',
-    canOpen: Boolean(row.cwd && path.isAbsolute(row.cwd)),
-    ref: { sessionId: row.id, pilot, cwd: row.cwd || '' },
+    canOpen: true,
+    ref: { sessionId: row.id, pilot, cwd: row.cwd || HOME },
   }
 }
 
