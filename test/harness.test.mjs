@@ -16,6 +16,7 @@ import opencode from '../server/harnesses/opencode.mjs'
 import { HARNESSES } from '../server/harnesses/index.mjs'
 import codex from '../server/harnesses/codex.mjs'
 import claudeCode from '../server/harnesses/claude-code.mjs'
+import { isLiveSession, isWaitingSession } from '../server/harnesses/hermes.mjs'
 import { readTail, findExecutable } from '../server/lib/fsutil.mjs'
 import { schemeOf } from '../server/lib/xdg.mjs'
 import { withEnv, withPlatform, fakeExecutable } from './support/env.mjs'
@@ -37,6 +38,33 @@ test('every registered harness implements the interface, and none of them can wr
 test('harness ids are unique, and so are the id prefixes they hand out', () => {
   const ids = HARNESSES.map((h) => h.id)
   assert.equal(new Set(ids).size, ids.length)
+})
+
+// ── Hermes lifecycle ─────────────────────────────────────────────────────────
+
+test('an open-ended Hermes session is running only while it remains fresh', () => {
+  const now = Date.parse('2026-09-26T03:30:00.000Z')
+  assert.equal(
+    isLiveSession({ ended_at: null, last_activity_at: (now - 29 * 60 * 1000) / 1000 }, now),
+    true,
+    'a recent open session may still be working'
+  )
+  assert.equal(
+    isLiveSession({ ended_at: null, last_activity_at: (now - 31 * 60 * 1000) / 1000 }, now),
+    false,
+    'an abandoned session must not occupy a working plot forever'
+  )
+  assert.equal(
+    isLiveSession({ ended_at: now / 1000, last_activity_at: now / 1000 }, now),
+    false,
+    'a completed session is never working, even immediately after completion'
+  )
+})
+
+test('an assistant final with no later user message raises a Hermes handoff', () => {
+  assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'assistant' }), true)
+  assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'user' }), false)
+  assert.equal(isWaitingSession({ ended_at: 1, latest_message_role: 'assistant' }), false)
 })
 
 // ── ids are prefixed, and refs from the page are not trusted ──────────────────

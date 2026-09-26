@@ -72,6 +72,24 @@ function pilotDBs() {
 
 const openRead = (file) => new DatabaseSync(file, { readOnly: true })
 
+const ACTIVE_WINDOW_MS = 30 * 60 * 1000
+
+/**
+ * Hermes persists `ended_at = NULL` if a terminal/chat session ends without a
+ * lifecycle finalizer. Treat it as working only while its last real activity
+ * is fresh, mirroring every other Bot Crossing harness.
+ */
+export function isLiveSession(row, now = Date.now()) {
+  if (row.ended_at != null) return false
+  const activitySeconds = row.last_activity_at || row.started_at || 0
+  const activityAt = Number(activitySeconds) * 1000
+  return Number.isFinite(activityAt) && activityAt > 0 && now - activityAt >= 0 && now - activityAt < ACTIVE_WINDOW_MS
+}
+
+export function isWaitingSession(row) {
+  return row.ended_at == null && row.latest_message_role === 'assistant'
+}
+
 function toThread(row, pilot) {
   const root = row.git_repo_root || row.cwd || ''
   // Sessions run from the agent home (or with no cwd) are all the same
@@ -100,10 +118,8 @@ function toThread(row, pilot) {
     createdAt,
     lastActivityAt,
     lastFocusedAt: 0,
-    running: row.ended_at == null,
-    unread: Boolean(
-      row.last_activity_at && row.last_read_at && row.last_activity_at > row.last_read_at
-    ),
+    running: isLiveSession(row) && !isWaitingSession(row),
+    unread: isWaitingSession(row),
     hasError: false,
     archived: row.archived === 1,
     sizeBytes: tokens > 0 ? tokens * 4 : (row.message_count || 0) * 500,
@@ -127,6 +143,9 @@ const THREAD_SQL = `
              s.started_at, s.ended_at, s.message_count,
              s.input_tokens, s.output_tokens, s.archived,
              s.last_activity_at, s.last_read_at,
+             (SELECT m.role FROM messages m
+               WHERE m.session_id = s.id AND m.active = 1
+               ORDER BY m.id DESC LIMIT 1) AS latest_message_role,
              (SELECT substr(m.content, 1, 280) FROM messages m
                WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1
                ORDER BY m.id ASC LIMIT 1) AS first_user
