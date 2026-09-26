@@ -256,9 +256,21 @@ const actions = {
     // invisible to anyone viewing the colony from another machine on the LAN.
     if (thread.harness === 'hermes' && thread.ref?.dashboardPort) {
       const url = `${window.location.protocol}//${window.location.hostname}:${thread.ref.dashboardPort}/chat?resume=${encodeURIComponent(thread.ref.sessionId)}`
-      const win = window.open(url, '_blank', 'noopener')
+      // Sized features (not just `_blank`) are what tell Chrome/Firefox/Edge to spawn a real
+      // OS-level popup window instead of a tab in the current one. Centered on whichever
+      // screen this browser window already sits on — a new window otherwise lands wherever
+      // the OS defaults to, which on a multi-monitor desktop is rarely the one you're looking
+      // at. A name keyed on the session id means clicking Open again on the same bot focuses
+      // that window rather than spawning a second one.
+      const width = Math.min(1200, Math.round(window.screen.availWidth * 0.7))
+      const height = Math.min(860, Math.round(window.screen.availHeight * 0.8))
+      const left = window.screenX + Math.round((window.outerWidth - width) / 2)
+      const top = window.screenY + Math.round((window.outerHeight - height) / 2)
+      const features = `noopener,width=${width},height=${height},left=${left},top=${top}`
+      const win = window.open(url, `hermes-resume-${thread.ref.sessionId}`, features)
+      win?.focus()
       colony.astronauts.celebrate(thread.id)
-      hud.toast(win ? 'Opened in the Hermes dashboard' : 'Pop-up blocked — allow pop-ups for this page', win ? '' : 'err')
+      hud.toast(win ? 'Opened in a Hermes window' : 'Pop-up blocked — allow pop-ups for this page', win ? '' : 'err')
       setTimeout(poll, 1800)
       return
     }
