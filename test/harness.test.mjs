@@ -76,14 +76,14 @@ test('an assistant final with no later user message raises a Hermes handoff', ()
   )
 })
 
-test('Hermes offers a waiting session to the configured terminal', () => {
-  const opened = hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: '/tmp/demo' })
-  assert.deepEqual(opened, {
-    ok: true,
-    command: { argv: ['hermes', '--tui', '--resume', '20260926_100638_d3052c'], cwd: '/tmp/demo' },
-  })
-  assert.equal(hermes.openThread({ sessionId: ['20260926_100638_d3052c'], cwd: '/tmp/demo' }).ok, false)
-  assert.equal(hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: 'relative' }).ok, false)
+test('Hermes offers a waiting session to the configured terminal', async () => {
+  const opened = await hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: '/tmp/demo' })
+  assert.equal(opened.ok, true)
+  assert.ok(path.isAbsolute(opened.command.argv[0]), 'the resolved hermes binary is an absolute path')
+  assert.deepEqual(opened.command.argv.slice(1), ['--tui', '--resume', '20260926_100638_d3052c'])
+  assert.equal(opened.command.cwd, '/tmp/demo')
+  assert.equal((await hermes.openThread({ sessionId: ['20260926_100638_d3052c'], cwd: '/tmp/demo' })).ok, false)
+  assert.equal((await hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: 'relative' })).ok, false)
 })
 
 // ── ids are prefixed, and refs from the page are not trusted ──────────────────

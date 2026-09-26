@@ -16,6 +16,7 @@ import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { findExecutable } from '../lib/fsutil.mjs'
 
 const HOME = os.homedir()
 
@@ -184,7 +185,21 @@ async function scanThreads() {
   return out
 }
 
-function openThread(ref) {
+/**
+ * Places `npm i -g`, `curl | sh` installers, and a user-local pip/pipx put the `hermes`
+ * binary that a server started from a login-less systemd unit or launcher would not see on
+ * its own thin PATH — mirrors the same widening every other CLI-launching harness here does.
+ */
+const CLI_DIRS = [
+  path.join(HOME, '.local', 'bin'),
+  path.join(HOME, '.npm-global', 'bin'),
+  '/opt/homebrew/bin',
+  '/usr/local/bin',
+  '/usr/bin',
+]
+const cliBinary = () => findExecutable('hermes', CLI_DIRS)
+
+async function openThread(ref) {
   const { sessionId, cwd } = ref || {}
   if (typeof sessionId !== 'string' || !/^\d{8}_\d{6}_[0-9a-f]+$/.test(sessionId)) {
     return { ok: false, error: 'That Hermes session id is not valid' }
@@ -192,7 +207,9 @@ function openThread(ref) {
   if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) {
     return { ok: false, error: 'That Hermes session has no usable working folder to resume in' }
   }
-  return { ok: true, command: { argv: ['hermes', '--tui', '--resume', sessionId], cwd } }
+  const bin = await cliBinary()
+  if (!bin) return { ok: false, error: 'No `hermes` CLI found on PATH to resume this session' }
+  return { ok: true, command: { argv: [bin, '--tui', '--resume', sessionId], cwd } }
 }
 
 function newSession() {
