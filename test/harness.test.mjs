@@ -64,7 +64,16 @@ test('an open-ended Hermes session is running only while it remains fresh', () =
 test('an assistant final with no later user message raises a Hermes handoff', () => {
   assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'assistant' }), true)
   assert.equal(isWaitingSession({ ended_at: null, latest_message_role: 'user' }), false)
-  assert.equal(isWaitingSession({ ended_at: 1, latest_message_role: 'assistant' }), false)
+  assert.equal(
+    isWaitingSession({ ended_at: 1, end_reason: 'cli_close', latest_message_role: 'assistant' }),
+    true,
+    'the terminal closing right after the ask is still a question owed a reply'
+  )
+  assert.equal(
+    isWaitingSession({ ended_at: 1, end_reason: 'startup_orphan_reap', latest_message_role: 'assistant' }),
+    false,
+    'an orphan reap never asked anything — nothing to resume'
+  )
 })
 
 test('Hermes offers a waiting session to the configured terminal', () => {

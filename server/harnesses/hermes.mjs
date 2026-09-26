@@ -86,8 +86,18 @@ export function isLiveSession(row, now = Date.now()) {
   return Number.isFinite(activityAt) && activityAt > 0 && now - activityAt >= 0 && now - activityAt < ACTIVE_WINDOW_MS
 }
 
+/**
+ * A session whose last real turn was the assistant handing control back — whether the process
+ * is still open on stdin or the terminal was closed/exited right after asking. A closed CLI
+ * process (`ended_at` set via `cli_close`/`tui_close`) that never got a reply is exactly the
+ * "waiting on you" case Bot Crossing must surface: the human still owes the agent an answer,
+ * and `--resume` is how they give it. Only a session that was reaped as an orphan, or one whose
+ * last turn was the human's own message (nothing to answer), is excluded.
+ */
 export function isWaitingSession(row) {
-  return row.ended_at == null && row.latest_message_role === 'assistant'
+  if (row.latest_message_role !== 'assistant') return false
+  if (row.end_reason === 'startup_orphan_reap' || row.end_reason === 'ws_orphan_reap') return false
+  return true
 }
 
 function toThread(row, pilot) {
@@ -140,7 +150,7 @@ async function detect() {
 
 const THREAD_SQL = `
       SELECT s.id, s.title, s.model, s.source, s.cwd, s.git_branch, s.git_repo_root,
-             s.started_at, s.ended_at, s.message_count,
+             s.started_at, s.ended_at, s.end_reason, s.message_count,
              s.input_tokens, s.output_tokens, s.archived,
              s.last_activity_at, s.last_read_at,
              (SELECT m.role FROM messages m
