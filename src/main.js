@@ -25,6 +25,7 @@ import {
 } from './game/api.js'
 import { hideProject, hiddenCatalog, unhideProject } from './game/hidden-projects.js'
 import { withErrands } from './game/errands.js'
+import { savedScreen } from './core/screen-placement.js'
 
 /**
  * Boot and the outer game loop.
@@ -257,15 +258,21 @@ const actions = {
     if (thread.harness === 'hermes' && thread.ref?.dashboardPort) {
       const url = `${window.location.protocol}//${window.location.hostname}:${thread.ref.dashboardPort}/chat?resume=${encodeURIComponent(thread.ref.sessionId)}`
       // Sized features (not just `_blank`) are what tell Chrome/Firefox/Edge to spawn a real
-      // OS-level popup window instead of a tab in the current one. Centered on whichever
-      // screen this browser window already sits on — a new window otherwise lands wherever
-      // the OS defaults to, which on a multi-monitor desktop is rarely the one you're looking
-      // at. A name keyed on the session id means clicking Open again on the same bot focuses
-      // that window rather than spawning a second one.
-      const width = Math.min(1200, Math.round(window.screen.availWidth * 0.7))
-      const height = Math.min(860, Math.round(window.screen.availHeight * 0.8))
-      const left = window.screenX + Math.round((window.outerWidth - width) / 2)
-      const top = window.screenY + Math.round((window.outerHeight - height) / 2)
+      // OS-level popup window instead of a tab in the current one. If the user has picked a
+      // monitor via Settings → View → "Hermes popups on" (Chrome/Edge Window Management API,
+      // src/core/screen-placement.js), place it there; otherwise fall back to centering on
+      // whichever screen this browser window itself already sits on. A name keyed on the
+      // session id means clicking Open again on the same bot focuses that window rather than
+      // spawning a second one.
+      const chosen = savedScreen()
+      const width = Math.min(1200, Math.round((chosen?.width ?? window.screen.availWidth) * 0.7))
+      const height = Math.min(860, Math.round((chosen?.height ?? window.screen.availHeight) * 0.8))
+      const left = chosen
+        ? chosen.left + Math.round((chosen.width - width) / 2)
+        : window.screenX + Math.round((window.outerWidth - width) / 2)
+      const top = chosen
+        ? chosen.top + Math.round((chosen.height - height) / 2)
+        : window.screenY + Math.round((window.outerHeight - height) / 2)
       const features = `noopener,width=${width},height=${height},left=${left},top=${top}`
       const win = window.open(url, `hermes-resume-${thread.ref.sessionId}`, features)
       win?.focus()
