@@ -77,13 +77,16 @@ test('an assistant final with no later user message raises a Hermes handoff', ()
 })
 
 test('Hermes offers a waiting session to the configured terminal', async () => {
-  const opened = await hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: '/tmp/demo' })
+  const opened = await hermes.openThread({ sessionId: '20260926_100638_d3052c', pilot: 'main', cwd: '/tmp/demo' })
   assert.equal(opened.ok, true)
   assert.ok(path.isAbsolute(opened.command.argv[0]), 'the resolved hermes binary is an absolute path')
   assert.deepEqual(opened.command.argv.slice(1), ['--tui', '--resume', '20260926_100638_d3052c'])
   assert.equal(opened.command.cwd, '/tmp/demo')
   assert.equal((await hermes.openThread({ sessionId: ['20260926_100638_d3052c'], cwd: '/tmp/demo' })).ok, false)
   assert.equal((await hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: 'relative' })).ok, false)
+  // No pilot named in `ref` still resolves against the default profile rather than throwing.
+  const noPilot = await hermes.openThread({ sessionId: '20260926_100638_d3052c', cwd: '/tmp/demo' })
+  assert.equal(noPilot.ok, true)
 })
 
 // ── ids are prefixed, and refs from the page are not trusted ──────────────────

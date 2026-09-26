@@ -76,6 +76,15 @@ const openRead = (file) => new DatabaseSync(file, { readOnly: true })
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000
 
 /**
+ * The Hermes web dashboard's own port — `hermes dashboard` / the gateway's chat UI, wherever it
+ * is reached from. Bot Crossing's server has no idea which network interface or hostname the
+ * *browser* used to reach it, so it cannot build a working dashboard URL itself; it hands the
+ * port back in `ref` and the page builds `http://<same-host-you're-on>:<port>/chat?resume=…`,
+ * because the dashboard listens on every interface (`0.0.0.0:<port>`) right alongside it.
+ */
+const DASHBOARD_PORT = Number(process.env.HERMES_DASHBOARD_PORT) || 9119
+
+/**
  * Hermes persists `ended_at = NULL` if a terminal/chat session ends without a
  * lifecycle finalizer. Treat it as working only while its last real activity
  * is fresh, mirroring every other Bot Crossing harness.
@@ -136,7 +145,7 @@ function toThread(row, pilot) {
     sizeBytes: tokens > 0 ? tokens * 4 : (row.message_count || 0) * 500,
     source: row.source || '',
     canOpen: true,
-    ref: { sessionId: row.id, pilot, cwd: row.cwd || HOME },
+    ref: { sessionId: row.id, pilot, cwd: row.cwd || HOME, dashboardPort: DASHBOARD_PORT },
   }
 }
 
@@ -199,13 +208,43 @@ const CLI_DIRS = [
 ]
 const cliBinary = () => findExecutable('hermes', CLI_DIRS)
 
+/** Re-reads one session's liveness straight from disk — never trust the scan's last poll for
+ *  a decision as consequential as spawning a second process onto the same conversation. */
+function currentlyLive(sessionId, pilot) {
+  const db = pilotDBs().find((d) => d.pilot === pilot)
+  if (!db) return false
+  let handle
+  try {
+    handle = openRead(db.file)
+    const row = handle
+      .prepare(
+        `SELECT ended_at, end_reason, last_activity_at, started_at,
+                (SELECT role FROM messages WHERE session_id = ? AND active = 1 ORDER BY id DESC LIMIT 1) AS latest_message_role
+           FROM sessions WHERE id = ?`
+      )
+      .get(sessionId, sessionId)
+    if (!row) return false
+    return isLiveSession(row) && !isWaitingSession(row)
+  } catch {
+    return false
+  } finally {
+    handle?.close()
+  }
+}
+
 async function openThread(ref) {
-  const { sessionId, cwd } = ref || {}
+  const { sessionId, pilot, cwd } = ref || {}
   if (typeof sessionId !== 'string' || !/^\d{8}_\d{6}_[0-9a-f]+$/.test(sessionId)) {
     return { ok: false, error: 'That Hermes session id is not valid' }
   }
   if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) {
     return { ok: false, error: 'That Hermes session has no usable working folder to resume in' }
+  }
+  if (currentlyLive(sessionId, pilot || 'main')) {
+    return {
+      ok: false,
+      error: 'This Hermes session is running right now — resuming it here would fork the conversation.',
+    }
   }
   const bin = await cliBinary()
   if (!bin) return { ok: false, error: 'No `hermes` CLI found on PATH to resume this session' }

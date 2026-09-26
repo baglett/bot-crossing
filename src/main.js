@@ -249,6 +249,19 @@ const actions = {
   openThread: async () => {
     const thread = threads.find((t) => t.id === selectedId)
     if (!thread) return
+    // Hermes has no desktop app and no "this machine" CLI worth spawning: the session lives
+    // behind its own web dashboard, which the browser you are already looking at can reach
+    // directly — on the same host, over whichever interface got you to Bot Crossing at all.
+    // Server-side `openThread` would instead launch a terminal on the *Bot Crossing host*,
+    // invisible to anyone viewing the colony from another machine on the LAN.
+    if (thread.harness === 'hermes' && thread.ref?.dashboardPort) {
+      const url = `${window.location.protocol}//${window.location.hostname}:${thread.ref.dashboardPort}/chat?resume=${encodeURIComponent(thread.ref.sessionId)}`
+      const win = window.open(url, '_blank', 'noopener')
+      colony.astronauts.celebrate(thread.id)
+      hud.toast(win ? 'Opened in the Hermes dashboard' : 'Pop-up blocked — allow pop-ups for this page', win ? '' : 'err')
+      setTimeout(poll, 1800)
+      return
+    }
     try {
       const shown = await openThread(thread, settings.get('openIn'))
       colony.astronauts.celebrate(thread.id)
